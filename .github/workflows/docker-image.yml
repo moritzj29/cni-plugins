@@ -35,5 +35,5 @@ jobs:
     - name: Build the Docker image
       run: |
         currImage="rockclimber81/cni-plugins:dev"
-        docker buildx build --platform linux/amd64,linux/arm64 --build-arg version=${{ vars.version }} -t $currImage --push .
+        docker buildx build --platform linux/amd64,linux/arm64,linux/arm --build-arg version=${{ vars.version }} -t $currImage --push .
         docker logout

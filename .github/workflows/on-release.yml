@@ -36,5 +36,5 @@ jobs:
         version=$(git describe --abbrev=0 --tags)
         currImage="rockclimber81/cni-plugins:$version"
         latestImage="rockclimber81/cni-plugins"
-        docker buildx build --platform linux/amd64,linux/arm64 -t $currImage --build-arg version=${{ vars.version }} -t $latestImage --push .
+        docker buildx build --platform linux/amd64,linux/arm64,linux/arm -t $currImage --build-arg version=${{ vars.version }} -t $latestImage --push .
         docker logout
