@@ -1,0 +1,80 @@
+# based on https://stackoverflow.com/a/58468828
+name: Get latest release version
+on:
+  schedule:
+    - cron:  '0 10 * * *'
+    #- cron: '*/15 * * * *' 
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Fetch release version
+        # writes latest release tag name into file
+        run: |
+          curl -sL https://api.github.com/repos/containernetworking/plugins/releases/latest | \
+          jq -r ".tag_name" > release-versions/plugins-latest.txt
+      - name: Set version variable
+        run: |
+          version="$(<release-versions/plugins-latest.txt)"
+          #version = ${cat release-versions/plugins-latest.txt}
+          echo "version=$version" >> $GITHUB_ENV
+          echo ${{ env.version }}
+      - name: Check for modified files
+        id: git-check
+        run: echo ::set-output name=modified::$([ -z "`git status --porcelain`" ] && echo "false" || echo "true")
+      - name: Commit latest release version
+        if: steps.git-check.outputs.modified == 'true'
+        run: |
+          git config --global user.name 'moritzj29'
+          git config --global user.email '18733473+moritzj29@users.noreply.github.com'
+          git commit -am "New release version"
+          git push
+      - name: Checkout code
+        uses: actions/checkout@v3
+        if: steps.git-check.outputs.modified == 'true'
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        if: steps.git-check.outputs.modified == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ env.version }}
+          release_name: Release ${{ env.version }}
+          body: |
+            Automatic release triggered by new upstream release.
+          draft: false
+          prerelease: false
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        if: steps.git-check.outputs.modified == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up QEMU dependency
+        uses: docker/setup-qemu-action@v2
+        if: steps.git-check.outputs.modified == 'true'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        if: steps.git-check.outputs.modified == 'true'
+      - name: Build controller image
+        if: steps.changed-files-plantcontroller.outputs.any_changed == 'true'
+        uses: docker/build-push-action@v2
+        with:
+          context: ${{ env.context }}
+          tags: ${{ env.image_name_controller }}
+          platforms: linux/arm64,linux/amd64
+          push: true
+        env:
+          context: ./controller
+      - name: Build the Docker image
+        if: steps.git-check.outputs.modified == 'true'
+        run: |
+          currImage=$(echo "ghcr.io/moritzj29/cni-plugins:${{env.version}}")
+          echo ${currImage}
+          latestImage="ghcr.io/moritzj29/cni-plugins"
+          echo ${latestImage}
+          docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t $currImage --build-arg version=${{env.version}} -t $latestImage --push .
+          docker logout
